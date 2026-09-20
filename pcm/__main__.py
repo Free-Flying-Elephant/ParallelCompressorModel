@@ -32,7 +32,7 @@ def main() -> None:
         segment_angles_deg=[90.0, 90.0, 90.0, 90.0],
         inlet_p0=[100_000.0, 95_000.0, 100_000.0, 105_000.0],
         inlet_T0=[288.15, 288.15, 288.15, 288.15],
-        exit_area=0.02,
+        exit_area=0.005,
     )
     result = model.solve()
 
