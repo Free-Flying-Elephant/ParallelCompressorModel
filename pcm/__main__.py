@@ -14,7 +14,7 @@ from map_io import read_hecc_chc
 from model import ParallelCompressorModel
 
 MAP_FILE = Path(__file__).with_name("hecc.chC")
-
+AE = 3.14159265 / 4 * (312.5 ** 2 - 301.5 ** 2) * 1e-6
 
 def main() -> None:
     compressor_map = read_hecc_chc(MAP_FILE)
@@ -24,11 +24,11 @@ def main() -> None:
     model = ParallelCompressorModel(
         compressor_map=compressor_map,
         rotor_speed_rpm=20670.0,
-        beta=0.5,
+        beta=0.6,
         segment_angles_deg=[90.0, 90.0, 90.0, 90.0],
-        inlet_p0=[100_000.0, 95_000.0, 100_000.0, 105_000.0],
+        inlet_p0=[101_325.0, 90_000.0, 101_325.0, 101_325.0],
         inlet_T0=[288.15, 288.15, 288.15, 288.15],
-        exit_area=0.02,
+        exit_area=AE,
     )
     result = model.solve()
 

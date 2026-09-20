@@ -1,5 +1,5 @@
 .venv
 reqs.txt
 *.chC
-
 *.pyc
+__pychache__
