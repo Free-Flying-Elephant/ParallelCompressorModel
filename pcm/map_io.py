@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 
-from .compressor_map import CompressorMap
+from compressor_map import CompressorMap
 
 # 1 lbm/s in kg/s -- used to convert the mass-flow column of .chC files
 # (given in lb/s) to SI units, consistent with the rest of the model.

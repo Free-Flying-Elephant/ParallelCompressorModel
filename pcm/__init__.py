@@ -61,7 +61,7 @@ from .compressor_map import CompressorMap
 from .gas_properties import GasProperties, ReferenceConditions
 from .map_io import read_hecc_chc
 from .model import ParallelCompressorModel
-from .segment import ParallelCompressorResult, Segment, SegmentResult
+from .segments import ParallelCompressorResult, Segment, SegmentResult
 
 __all__ = [
     "GasProperties",
