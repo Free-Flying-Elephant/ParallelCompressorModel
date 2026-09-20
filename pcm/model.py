@@ -207,7 +207,7 @@ class ParallelCompressorModel:
 
                 mach = brentq(residual, mach_floor, mach_ceiling)
 
-        
+        assert type(mach) is float
         term = 1.0 + 0.5 * (gamma - 1.0) * mach**2
         T_static = T0 / term
         p_static = p0 / term ** (gamma / (gamma - 1.0))
