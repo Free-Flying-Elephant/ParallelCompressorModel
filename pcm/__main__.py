@@ -1,39 +1,113 @@
 """
-Example usage: reads the ``hecc.chC`` compressor map, applies a total-
-pressure distortion pattern across four 90-degree segments, solves the
-coupled parallel-compressor system, and prints per-segment and overall
-performance.
+Example usage / CLI entry point: reads a JSON input file describing the
+compressor map file, the parallel-compressor model inputs, and the desired
+output plot filename; solves the coupled system; prints per-segment and
+overall performance; and saves the annotated compressor-map plot.
 
-Run with ``python -m parallel_compressor_model`` from a directory containing
-``hecc.chC`` (or edit ``MAP_FILE`` below to point at your own map file).
+Run with:
+    python __main__.py [input_file.json]
+
+If no input file is given, ``input.json`` next to this script is used.
+
+Input file format
+------------------
+A JSON object with the following keys:
+
+    compressor_map_file    : path to the .chC compressor map file. Relative
+                              paths are resolved against the input file's
+                              own directory.
+    rotor_speed_rpm         : mechanical rotor speed [1/min].
+    beta                     : overall beta operating-point parameter.
+    segments                 : object with three parallel arrays, all the
+                              same length (one entry per angular segment):
+                                  "angles_deg" : segment angular extents
+                                                 [deg] (must sum to 360).
+                                  "inlet_p0"    : segment inlet total
+                                                 pressures [Pa].
+                                  "inlet_T0"    : segment inlet total
+                                                 temperatures [K].
+    exit_area (optional)      : discharge flow area [m^2]. Defaults to 1.0.
+    gas_properties (optional)          : object overriding GasProperties
+                              defaults ("cp", "gamma", "R").
+    reference_conditions (optional)    : object overriding
+                              ReferenceConditions defaults ("p_ref", "T_ref").
+    output_map_file          : filename the annotated compressor-map plot is
+                              saved to. Relative paths are resolved against
+                              the input file's own directory.
+
+See ``input.json`` in this directory for a worked example.
 """
 
+import argparse
+import json
 from pathlib import Path
+from typing import Any, Dict
 
 import matplotlib.pyplot as plt
 
+from gas_properties import GasProperties, ReferenceConditions
 from map_io import read_hecc_chc
 from model import ParallelCompressorModel
 from plotting import plot_parallel_compressor_result
 
-MAP_FILE = Path(__file__).with_name("hecc.chC")
-PLOT_FILE = Path(__file__).with_name("example_map.png")
+DEFAULT_INPUT_FILE = Path(__file__).with_name("input.json")
+
+
+def _load_input(input_file: Path) -> Dict[str, Any]:
+    """Read and parse the JSON input file."""
+    with input_file.open("r") as f:
+        return json.load(f)
+
+
+def _build_model(config: Dict[str, Any], base_dir: Path) -> ParallelCompressorModel:
+    """
+    Construct a ``ParallelCompressorModel`` (and its ``CompressorMap``) from
+    a parsed input-file dict. See the module docstring for the expected
+    keys. ``base_dir`` is the directory relative paths are resolved against
+    (the input file's own directory).
+    """
+    map_path = Path(config["compressor_map_file"])
+    if not map_path.is_absolute():
+        map_path = base_dir / map_path
+    compressor_map = read_hecc_chc(map_path)
+
+    segments_cfg = config["segments"]
+
+    gas = GasProperties(**config.get("gas_properties", {}))
+    reference = ReferenceConditions(**config.get("reference_conditions", {}))
+
+    return ParallelCompressorModel(
+        compressor_map=compressor_map,
+        rotor_speed_rpm=float(config["rotor_speed_rpm"]),
+        beta=float(config["beta"]),
+        segment_angles_deg=segments_cfg["angles_deg"],
+        inlet_p0=segments_cfg["inlet_p0"],
+        inlet_T0=segments_cfg["inlet_T0"],
+        gas=gas,
+        reference=reference,
+        exit_area=float(config.get("exit_area", 1.0)),
+    )
 
 
 def main() -> None:
-    compressor_map = read_hecc_chc(MAP_FILE)
-
-    # One low-pressure sector (e.g. representing an inlet distortion screen
-    # or crosswind ingestion) among three sectors at ambient pressure.
-    model = ParallelCompressorModel(
-        compressor_map=compressor_map,
-        rotor_speed_rpm=20670.0,
-        beta=0.5,
-        segment_angles_deg=[90.0, 90.0, 90.0, 90.0],
-        inlet_p0=[100_000.0, 95_000.0, 100_000.0, 105_000.0],
-        inlet_T0=[288.15, 288.15, 288.15, 288.15],
-        exit_area=0.005,
+    parser = argparse.ArgumentParser(
+        description=(
+            "Solve a multiple-segment parallel compressor model from a JSON "
+            "input file and plot the result on the compressor map."
+        )
     )
+    parser.add_argument(
+        "input_file",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_INPUT_FILE,
+        help=f"Path to the JSON input file (default: {DEFAULT_INPUT_FILE.name})",
+    )
+    args = parser.parse_args()
+
+    input_file: Path = args.input_file
+    config = _load_input(input_file)
+    model = _build_model(config, base_dir=input_file.resolve().parent)
     result = model.solve()
 
     header = (
@@ -56,10 +130,14 @@ def main() -> None:
         f"{o.surge_margin:7.2f} {o.efficiency:6.4f}"
     )
 
-    plot_parallel_compressor_result(result, compressor_map=compressor_map)
+    output_map_path = Path(config["output_map_file"])
+    if not output_map_path.is_absolute():
+        output_map_path = input_file.resolve().parent / output_map_path
+
+    plot_parallel_compressor_result(result, compressor_map=model.map)
     plt.tight_layout()
-    plt.savefig(PLOT_FILE, dpi=130)
-    print(f"\nSaved plot to {PLOT_FILE}")
+    plt.savefig(output_map_path, dpi=130)
+    print(f"\nSaved plot to {output_map_path}")
 
 
 if __name__ == "__main__":

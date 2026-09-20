@@ -1,0 +1,33 @@
+You are an experienced Python developer with backgroud in compressor aerodynamics. Your objective is to create a Multiple-Segment Parallel Compressor Model.
+
+Objective:
+Create a multiple-segment parallel compressor model (variable number of segments) according to a standard theory.
+The inlet total pressure varies for different segments, the static pressure at the outlet is constant.
+
+Constraints:
+Use Python. Use strong typing and include type hints. Use only built-in libraries, numpy, and scipy. Use classes (OOP).
+
+Other Requirements:
+Add comments to classess, functions, and crutial steps in the code.
+
+Inputs:
+- compressor map (mass flow, total-to-total pressure rise, total-to-total isentropic efficiency)
+- compressor rotor speed (in 1/min)
+- compressor "beta" parameter (specifies the operating point)
+- array of angular segments (must equal 360 degrees)
+- array of inlet total pressures (same length as array of segments)
+- array of inlet total temperatures (same length as array of segments)
+
+Outputs:
+For every segment (and the whole compressor), compute these outputs:
+- total pressure
+- static pressure
+- total temperature
+- static temperature
+- mass flow
+- surge margin
+- efficiency
+- beta parameter
+
+Code Structure:
+- you decide

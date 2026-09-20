@@ -1,0 +1,12 @@
+{
+  "compressor_map_file": "hecc.chC",
+  "rotor_speed_rpm": 20670.0,
+  "beta": 0.5,
+  "segments": {
+    "angles_deg": [90.0, 90.0, 90.0, 90.0],
+    "inlet_p0": [100000.0, 95000.0, 100000.0, 105000.0],
+    "inlet_T0": [288.15, 288.15, 288.15, 288.15]
+  },
+  "exit_area": 0.005,
+  "output_map_file": "example_map.png"
+}
