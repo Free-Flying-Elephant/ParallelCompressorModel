@@ -53,6 +53,12 @@ Package layout
                            vendor/legacy map file formats (e.g. ``.chC``
                            constant-speedline files) via ``read_hecc_chc``.
 - ``model``             : ``ParallelCompressorModel`` (the solver).
+- ``plotting``           : Matplotlib visualization -- ``plot_compressor_map``
+                           (constant-speedline map) and
+                           ``plot_parallel_compressor_result`` (overlays a
+                           solved result on the map, annotated by surge
+                           margin). The only module in the package that
+                           depends on ``matplotlib``.
 - ``__main__``           : example-usage entry point
                            (``python -m parallel_compressor_model``).
 """
@@ -61,6 +67,7 @@ from .compressor_map import CompressorMap
 from .gas_properties import GasProperties, ReferenceConditions
 from .map_io import read_hecc_chc
 from .model import ParallelCompressorModel
+from .plotting import plot_compressor_map, plot_parallel_compressor_result
 from .segments import ParallelCompressorResult, Segment, SegmentResult
 
 __all__ = [
@@ -72,4 +79,6 @@ __all__ = [
     "CompressorMap",
     "read_hecc_chc",
     "ParallelCompressorModel",
+    "plot_compressor_map",
+    "plot_parallel_compressor_result",
 ]

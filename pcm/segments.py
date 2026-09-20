@@ -34,17 +34,25 @@ class SegmentResult:
 
     Attributes
     ----------
-    angle_deg     : angular extent represented by this result [deg]
-                    (360.0 for the whole-compressor aggregate).
-    p0            : total pressure at compressor discharge [Pa].
-    p_static      : static pressure at compressor discharge [Pa]
-                    (equal across all segments by construction).
-    T0            : total temperature at compressor discharge [K].
-    T_static      : static temperature at compressor discharge [K].
-    mass_flow     : (actual, non-corrected) mass flow [kg/s].
-    surge_margin  : surge margin at the segment's operating point [-].
-    efficiency    : total-to-total isentropic efficiency [-].
-    beta          : local beta coordinate on the compressor map [-].
+    angle_deg            : angular extent represented by this result [deg]
+                            (360.0 for the whole-compressor aggregate).
+    p0                    : total pressure at compressor discharge [Pa].
+    p_static              : static pressure at compressor discharge [Pa]
+                            (equal across all segments by construction).
+    T0                    : total temperature at compressor discharge [K].
+    T_static              : static temperature at compressor discharge [K].
+    mass_flow             : (actual, non-corrected) mass flow [kg/s].
+    pressure_ratio         : total-to-total pressure ratio, p0 / inlet p0 [-].
+    surge_margin           : surge margin at the segment's operating point [-].
+    efficiency             : total-to-total isentropic efficiency [-].
+    beta                   : local beta coordinate on the compressor map [-].
+    corrected_speed         : corrected rotor speed the map lookup was
+                              evaluated at [1/min].
+    mass_flow_corrected      : full-annulus-equivalent corrected mass flow
+                              read from the shared compressor map at
+                              (corrected_speed, beta) [kg/s] -- directly
+                              comparable to the map's own mass-flow axis,
+                              e.g. for plotting the operating point on the map.
     """
 
     angle_deg: float
@@ -53,9 +61,12 @@ class SegmentResult:
     T0: float
     T_static: float
     mass_flow: float
+    pressure_ratio: float
     surge_margin: float
     efficiency: float
     beta: float
+    corrected_speed: float
+    mass_flow_corrected: float
 
 
 @dataclass

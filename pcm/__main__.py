@@ -10,11 +10,15 @@ Run with ``python -m parallel_compressor_model`` from a directory containing
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
 from map_io import read_hecc_chc
 from model import ParallelCompressorModel
+from plotting import plot_parallel_compressor_result
 
 MAP_FILE = Path(__file__).with_name("hecc.chC")
-AE = 3.14159265 / 4 * (312.5 ** 2 - 301.5 ** 2) * 1e-6
+PLOT_FILE = Path(__file__).with_name("example_map.png")
+
 
 def main() -> None:
     compressor_map = read_hecc_chc(MAP_FILE)
@@ -24,11 +28,11 @@ def main() -> None:
     model = ParallelCompressorModel(
         compressor_map=compressor_map,
         rotor_speed_rpm=20670.0,
-        beta=0.6,
+        beta=0.5,
         segment_angles_deg=[90.0, 90.0, 90.0, 90.0],
-        inlet_p0=[101_325.0, 90_000.0, 101_325.0, 101_325.0],
+        inlet_p0=[100_000.0, 95_000.0, 100_000.0, 105_000.0],
         inlet_T0=[288.15, 288.15, 288.15, 288.15],
-        exit_area=AE,
+        exit_area=0.02,
     )
     result = model.solve()
 
@@ -51,6 +55,11 @@ def main() -> None:
         f"{o.T0:8.2f} {o.T_static:8.2f} {o.mass_flow:11.4f} "
         f"{o.surge_margin:7.2f} {o.efficiency:6.4f}"
     )
+
+    plot_parallel_compressor_result(result, compressor_map=compressor_map)
+    plt.tight_layout()
+    plt.savefig(PLOT_FILE, dpi=130)
+    print(f"\nSaved plot to {PLOT_FILE}")
 
 
 if __name__ == "__main__":

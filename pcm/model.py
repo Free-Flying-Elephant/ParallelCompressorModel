@@ -89,10 +89,11 @@ class ParallelCompressorModel:
             for a, p, t in zip(segment_angles_deg, inlet_p0, inlet_T0)
         ]
 
-        # Target total actual mass flow [kg/s] for the coupled solve; set by
-        # solve() before the residual function is used (see
-        # _target_total_mass_flow).
+        # Nominal operating point and solve target, set by
+        # _compute_nominal_operating_point() (called from solve()).
         self._target_mass_flow_actual: Optional[float] = None
+        self._nominal_corrected_speed: Optional[float] = None
+        self._nominal_mass_flow_corrected: Optional[float] = None
 
     # -------------------------------------------------------------------
     # Validation
@@ -216,22 +217,29 @@ class ParallelCompressorModel:
     # -------------------------------------------------------------------
     # Core coupled solve
     # -------------------------------------------------------------------
-    def _target_total_mass_flow(self) -> float:
+    def _compute_nominal_operating_point(self) -> None:
         """
-        Total actual mass flow [kg/s] the whole compressor is targeted to
-        deliver, representing the operating point set by a downstream
-        throttle/duct.
+        Compute and cache the nominal operating point used both (a) as the
+        target total mass flow for the coupled solve, and (b) as the
+        reference (corrected_speed, mass_flow_corrected) reported on the
+        whole-compressor aggregate result.
 
         Evaluated from the shared rotor speed and the requested overall
         ``beta``, at the mean (arithmetic average) inlet total pressure and
-        temperature across segments -- i.e. the flow the machine would pass
-        at that beta if the inlet were uniform.
+        temperature across segments -- i.e. the point the machine would sit
+        at if the inlet were uniform. Sets ``self._nominal_corrected_speed``,
+        ``self._nominal_mass_flow_corrected`` and
+        ``self._target_mass_flow_actual``.
         """
         T0_nominal = float(np.mean([seg.T0_in for seg in self.segments]))
         p0_nominal = float(np.mean([seg.p0_in for seg in self.segments]))
-        N_nominal = self._corrected_speed(T0_nominal)
-        m_corrected_nominal = self.map.get_mass_flow(N_nominal, self.beta)
-        return self._corrected_mass_flow_to_actual(m_corrected_nominal, p0_nominal, T0_nominal)
+        self._nominal_corrected_speed = self._corrected_speed(T0_nominal)
+        self._nominal_mass_flow_corrected = self.map.get_mass_flow(
+            self._nominal_corrected_speed, self.beta
+        )
+        self._target_mass_flow_actual = self._corrected_mass_flow_to_actual(
+            self._nominal_mass_flow_corrected, p0_nominal, T0_nominal
+        )
 
     def _segment_residuals(self, betas: NDArray[np.float64]) -> NDArray[np.float64]:
         """
@@ -293,7 +301,7 @@ class ParallelCompressorModel:
             Per-segment results (in input order) plus the whole-compressor
             aggregate.
         """
-        self._target_mass_flow_actual = self._target_total_mass_flow()
+        self._compute_nominal_operating_point()
 
         n = len(self.segments)
         betas0 = np.full(n, self.beta, dtype=np.float64)
@@ -374,9 +382,12 @@ class ParallelCompressorModel:
             T0=T0_out,
             T_static=T_static,
             mass_flow=mass_flow_actual,
+            pressure_ratio=pressure_ratio,
             surge_margin=surge_margin,
             efficiency=efficiency,
             beta=beta_local,
+            corrected_speed=corrected_speed,
+            mass_flow_corrected=mass_flow_corrected_full,
         )
 
     def _surge_margin(self, corrected_speed: float, mass_flow_corrected: float) -> float:
@@ -413,6 +424,9 @@ class ParallelCompressorModel:
         - ``beta`` : the requested overall beta (the nominal operating point
           the target mass flow was evaluated at); segments individually sit
           at different local betas.
+        - ``corrected_speed``, ``mass_flow_corrected`` : the nominal
+          (mean-inlet-condition) operating point on the shared map that the
+          solve was targeted at.
         """
         total_mass_flow = sum(r.mass_flow for r in segment_results)
         if total_mass_flow <= 0.0:
@@ -437,6 +451,12 @@ class ParallelCompressorModel:
             actual_work += r.mass_flow * actual_i
         efficiency_overall = ideal_work / actual_work if actual_work > 0.0 else float("nan")
 
+        p0_in_mean = float(np.mean([seg.p0_in for seg in self.segments]))
+        pressure_ratio_overall = p0_overall / p0_in_mean
+
+        assert self._nominal_corrected_speed is not None  # set by solve()
+        assert self._nominal_mass_flow_corrected is not None  # set by solve()
+
         return SegmentResult(
             angle_deg=360.0,
             p0=p0_overall,
@@ -444,7 +464,10 @@ class ParallelCompressorModel:
             T0=T0_overall,
             T_static=T_static_overall,
             mass_flow=total_mass_flow,
+            pressure_ratio=pressure_ratio_overall,
             surge_margin=surge_margin_overall,
             efficiency=efficiency_overall,
             beta=self.beta,
+            corrected_speed=self._nominal_corrected_speed,
+            mass_flow_corrected=self._nominal_mass_flow_corrected,
         )

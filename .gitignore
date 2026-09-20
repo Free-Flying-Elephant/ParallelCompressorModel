@@ -3,3 +3,4 @@ reqs.txt
 *.chC
 *.pyc
 __pychache__
+*.png
