@@ -86,7 +86,8 @@ def _build_model(config: Dict[str, Any], base_dir: Path) -> ParallelCompressorMo
         gas=gas,
         reference=reference,
         exit_area=float(config.get("exit_area", 1.0)),
-    )
+        inlet_area=float(config.get("inlet_area", 1.0))
+    ) # 106.937708 # 37.96
 
 
 def main() -> None:
@@ -110,6 +111,7 @@ def main() -> None:
     model = _build_model(config, base_dir=input_file.resolve().parent)
     result = model.solve()
 
+    print()
     header = (
         f"{'angle[deg]':>10} {'beta':>8} {'p0[Pa]':>10} {'p_s[Pa]':>10} "
         f"{'T0[K]':>8} {'T_s[K]':>8} {'mdot[kg/s]':>11} {'SM[%]':>7} {'eff':>6}"
@@ -129,6 +131,8 @@ def main() -> None:
         f"{o.T0:8.2f} {o.T_static:8.2f} {o.mass_flow:11.4f} "
         f"{o.surge_margin:7.2f} {o.efficiency:6.4f}"
     )
+    print(f"{'DC60':>10} {model.dc60():>8.4f}")
+    print(f"{'DC90':>10} {model.dc90():>8.4f}")
 
     output_map_path = Path(config["output_map_file"])
     if not output_map_path.is_absolute():

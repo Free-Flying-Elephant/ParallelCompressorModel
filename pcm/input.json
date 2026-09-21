@@ -8,5 +8,6 @@
     "inlet_T0": [288.15, 288.15, 288.15, 288.15]
   },
   "exit_area": 0.005,
+  "inlet_area" : 0.00785,
   "output_map_file": "example_map.png"
 }

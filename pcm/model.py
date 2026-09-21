@@ -49,6 +49,7 @@ class ParallelCompressorModel:
         gas: GasProperties = GasProperties(),
         reference: ReferenceConditions = ReferenceConditions(),
         exit_area: float = 1.0,
+        inlet_area: float = 1.0,
     ) -> None:
         """
         Parameters
@@ -62,7 +63,12 @@ class ParallelCompressorModel:
                               map; also used as the initial guess for every
                               segment's local beta.
         segment_angles_deg  : angular extent of each segment [deg]. Must sum
-                              to 360.
+                              to 360. Segments are assumed arranged
+                              sequentially around the annulus in the order
+                              given (segment 0 starting at a reference angle
+                              of 0 deg) -- this ordering matters for the
+                              DC(theta) distortion descriptors, which depend
+                              on circumferential position, not just extent.
         inlet_p0            : inlet total pressure per segment [Pa]. Same
                               length as ``segment_angles_deg``.
         inlet_T0            : inlet total temperature per segment [K]. Same
@@ -74,6 +80,11 @@ class ParallelCompressorModel:
                               static pressure/temperature to mass flow at
                               the common exit plane. Divided among segments
                               in proportion to their angular extent.
+        inlet_area          : compressor face (inlet) flow area [m^2], used
+                              only by the DC(theta) distortion descriptors
+                              (``distortion_coefficient``, ``dc60``,
+                              ``dc90``) to compute the average inlet dynamic
+                              pressure. Distinct from ``exit_area``.
         """
         self._validate_inputs(segment_angles_deg, inlet_p0, inlet_T0)
 
@@ -83,6 +94,7 @@ class ParallelCompressorModel:
         self.gas: GasProperties = gas
         self.reference: ReferenceConditions = reference
         self.exit_area: float = exit_area
+        self.inlet_area: float = inlet_area
 
         self.segments: List[Segment] = [
             Segment(angle_deg=float(a), p0_in=float(p), T0_in=float(t))
@@ -471,3 +483,130 @@ class ParallelCompressorModel:
             corrected_speed=self._nominal_corrected_speed,
             mass_flow_corrected=self._nominal_mass_flow_corrected,
         )
+
+    # -------------------------------------------------------------------
+    # Circumferential inlet-distortion descriptors: DC(theta), DC60, DC90
+    # -------------------------------------------------------------------
+    #
+    # DC(theta) is the classical circumferential distortion coefficient
+    # (SAE ARP1420; also widely known from Reid, 1969, the same reference
+    # underlying the parallel-compressor coupling above):
+    #
+    #     DC(theta) = (P0bar - P0_theta,low) / qbar
+    #
+    # where P0bar is the angle-weighted average inlet total pressure over
+    # the full 360-degree annulus, P0_theta,low is the *lowest* angle-
+    # weighted average inlet total pressure found over any contiguous arc
+    # of extent ``theta`` degrees (the "worst" low-pressure sector), and
+    # qbar is the average dynamic pressure at the compressor face. DC60 and
+    # DC90 are DC(theta) evaluated at theta = 60 and 90 degrees.
+    #
+    # This is purely an *inlet* characterization -- it depends only on the
+    # segment definitions (angle_deg, p0_in) and the total inlet mass flow,
+    # not on how the compressor itself responds -- so it can be evaluated
+    # before or after solve().
+
+    def _segment_boundaries_deg(self) -> NDArray[np.float64]:
+        """
+        Cumulative angular boundaries of the segments, assuming they are
+        arranged sequentially around the annulus in the order given
+        (segment 0 starting at 0 deg). Returns an array of length n+1:
+        ``boundaries[i]`` is the start angle of segment i, and
+        ``boundaries[-1] == 360.0``.
+        """
+        return np.concatenate(
+            ([0.0], np.cumsum([seg.angle_deg for seg in self.segments]))
+        )
+
+    def _angle_weighted_average(self, values: Sequence[float]) -> float:
+        """Angle-weighted average of a per-segment quantity over the full annulus."""
+        weighted_sum = sum(seg.angle_deg * v for seg, v in zip(self.segments, values))
+        return weighted_sum / 360.0
+
+    def _arc_average_p0(self, start_deg: float, extent_deg: float) -> float:
+        """
+        Angle-weighted average inlet total pressure over the contiguous arc
+        ``[start_deg, start_deg + extent_deg)`` of the annulus, wrapping
+        past 360 degrees as needed, given the piecewise-constant per-segment
+        ``p0_in`` profile implied by ``self.segments`` (see
+        ``_segment_boundaries_deg``).
+        """
+        boundaries = self._segment_boundaries_deg()
+        start = start_deg % 360.0
+        end = start + extent_deg
+
+        # Split the (possibly wrapping) arc into up to two non-wrapping
+        # sub-arcs so overlap with each segment can be computed as ordinary
+        # 1-D interval overlap.
+        sub_arcs = [(start, min(end, 360.0))]
+        if end > 360.0:
+            sub_arcs.append((0.0, end - 360.0))
+
+        weighted_sum = 0.0
+        for arc_start, arc_end in sub_arcs:
+            for i, seg in enumerate(self.segments):
+                seg_start, seg_end = boundaries[i], boundaries[i + 1]
+                overlap = min(arc_end, seg_end) - max(arc_start, seg_start)
+                if overlap > 0.0:
+                    weighted_sum += overlap * seg.p0_in
+
+        return weighted_sum / extent_deg
+
+    def _worst_sector_average_p0(self, extent_deg: float) -> float:
+        """
+        Minimum angle-weighted average inlet total pressure over any
+        contiguous arc of extent ``extent_deg`` around the annulus (the
+        "P0_theta,low" term of DC(theta)).
+
+        Since the inlet total pressure profile is piecewise-constant, the
+        sliding-window average is a piecewise-linear function of the
+        window's start angle, so its minimum occurs at one of the window's
+        "critical" start angles -- where either the leading or trailing
+        edge coincides with a segment boundary. Only those candidates need
+        to be evaluated.
+        """
+        boundaries = self._segment_boundaries_deg()[:-1]  # segment start angles
+        candidate_starts = np.concatenate([boundaries, (boundaries - extent_deg) % 360.0])
+        return min(self._arc_average_p0(float(s), extent_deg) for s in candidate_starts)
+
+    def _average_dynamic_pressure(self, p0_avg: float, T0_avg: float, mass_flow: float) -> float:
+        """
+        Average dynamic pressure at the compressor face inlet:
+        qbar = P0bar - Psbar, where Psbar is the static pressure
+        corresponding to the total inlet mass flow passing uniformly
+        through ``self.inlet_area`` at the average inlet total conditions
+        (via the same compressible-flow Mach-number solve used elsewhere in
+        the model).
+        """
+        p_static, _ = self._static_from_total(p0_avg, T0_avg, mass_flow, self.inlet_area)
+        return p0_avg - p_static
+
+    def distortion_coefficient(self, extent_deg: float) -> float:
+        """
+        Circumferential distortion coefficient DC(theta) for an arc extent
+        of ``extent_deg`` degrees:
+
+            DC(theta) = (P0bar - P0_theta,low) / qbar
+
+        Uses the total inlet mass flow (``_target_mass_flow_actual``),
+        computing it via ``_compute_nominal_operating_point`` first if
+        ``solve()`` has not already been called.
+        """
+        if self._target_mass_flow_actual is None:
+            self._compute_nominal_operating_point()
+        assert self._target_mass_flow_actual is not None
+
+        p0_avg = self._angle_weighted_average([seg.p0_in for seg in self.segments])
+        T0_avg = self._angle_weighted_average([seg.T0_in for seg in self.segments])
+        p0_low = self._worst_sector_average_p0(extent_deg)
+        q_avg = self._average_dynamic_pressure(p0_avg, T0_avg, self._target_mass_flow_actual)
+
+        return (p0_avg - p0_low) / q_avg
+
+    def dc60(self) -> float:
+        """DC(60): circumferential distortion coefficient for a 60-degree sector."""
+        return self.distortion_coefficient(60.0)
+
+    def dc90(self) -> float:
+        """DC(90): circumferential distortion coefficient for a 90-degree sector."""
+        return self.distortion_coefficient(90.0)
