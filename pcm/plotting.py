@@ -48,7 +48,7 @@ def plot_compressor_map(
         ``plot_parallel_compressor_result``).
     """
     if ax is None:
-        _, ax = plt.subplots(figsize=(7, 5))
+        _, ax = plt.subplots(figsize=(10, 6))
 
     for i, speed in enumerate(compressor_map.corrected_speed_grid):
         ax.plot(
