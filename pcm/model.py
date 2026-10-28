@@ -243,8 +243,17 @@ class ParallelCompressorModel:
         ``self._nominal_mass_flow_corrected`` and
         ``self._target_mass_flow_actual``.
         """
-        T0_nominal = float(np.mean([seg.T0_in for seg in self.segments]))
-        p0_nominal = float(np.mean([seg.p0_in for seg in self.segments]))
+        # NOTE: must be the *angle-weighted* average, not a plain mean over
+        # the segment list -- otherwise the nominal operating point (and the
+        # target mass flow derived from it) depends on how the annulus
+        # happens to be subdivided rather than on the physical distortion
+        # pattern alone (e.g. one 270 deg segment + one 90 deg segment would
+        # give a different nominal p0/T0 than three 90 deg segments + one
+        # 90 deg segment describing the exact same physical pressure
+        # pattern). See _angle_weighted_average, used identically by the
+        # DC(theta) descriptors below.
+        T0_nominal = self._angle_weighted_average([seg.T0_in for seg in self.segments])
+        p0_nominal = self._angle_weighted_average([seg.p0_in for seg in self.segments])
         self._nominal_corrected_speed = self._corrected_speed(T0_nominal)
         self._nominal_mass_flow_corrected = self.map.get_mass_flow(
             self._nominal_corrected_speed, self.beta
@@ -327,7 +336,6 @@ class ParallelCompressorModel:
             xtol=1e-12,
             ftol=1e-12,
             gtol=1e-12,
-            verbose=1
         )
         if not result.success:
             warnings.warn(
@@ -339,7 +347,6 @@ class ParallelCompressorModel:
             )
 
         converged_betas = result.x
-        print(converged_betas)
         segment_results = [
             self._segment_performance(seg, float(b))
             for seg, b in zip(self.segments, converged_betas)
@@ -386,8 +393,6 @@ class ParallelCompressorModel:
         p_static, T_static = self._static_from_total(
             p0_out, T0_out, mass_flow_actual, segment_area
         )
-
-        print(segment.angle_deg, p0_out, T0_out, p_static, T_static)
 
         surge_margin = self._surge_margin(corrected_speed, mass_flow_corrected_full)
 
@@ -467,7 +472,10 @@ class ParallelCompressorModel:
             actual_work += r.mass_flow * actual_i
         efficiency_overall = ideal_work / actual_work if actual_work > 0.0 else float("nan")
 
-        p0_in_mean = float(np.mean([seg.p0_in for seg in self.segments]))
+        # Same angle-weighting fix as _compute_nominal_operating_point: must
+        # not depend on how many segments the annulus happens to be split
+        # into.
+        p0_in_mean = self._angle_weighted_average([seg.p0_in for seg in self.segments])
         pressure_ratio_overall = p0_overall / p0_in_mean
 
         assert self._nominal_corrected_speed is not None  # set by solve()
