@@ -31,9 +31,15 @@ A JSON object with the following keys:
                               defaults ("cp", "gamma", "R").
     reference_conditions (optional)    : object overriding
                               ReferenceConditions defaults ("p_ref", "T_ref").
-    output_map_file          : filename the annotated compressor-map plot is
-                              saved to. Relative paths are resolved against
-                              the input file's own directory.
+    output_map_file          : filename the annotated pressure-ratio
+                              compressor-map plot is saved to. Relative
+                              paths are resolved against the input file's
+                              own directory.
+    output_efficiency_map_file (optional) : filename the annotated
+                              efficiency compressor-map plot is saved to.
+                              Defaults to ``output_map_file`` with
+                              "_efficiency" inserted before the extension
+                              (e.g. "map.png" -> "map_efficiency.png").
 
 See ``input.json`` in this directory for a worked example.
 """
@@ -103,7 +109,7 @@ def printing(model, result):
         print(
             f"{r.angle_deg:10.1f} {r.beta:8.4f} {r.p0:10.1f} {r.p_static:10.1f} "
             f"{r.T0:8.2f} {r.T_static:8.2f} {r.mass_flow:11.4f} "
-            f"{r.surge_margin:7.2f} {r.efficiency:6.4f} {r.mass_flow_corrected:11.4f} {r.pressure_ratio:.4f} {r.p0 / r.pressure_ratio:.0f}"
+            f"{r.surge_margin:7.2f} {r.efficiency:6.4f}"
         )
     print("-" * len(header))
     
@@ -139,14 +145,35 @@ def main() -> None:
 
     printing(model, result)
 
+    base_dir = input_file.resolve().parent
+
     output_map_path = Path(config["output_map_file"])
     if not output_map_path.is_absolute():
-        output_map_path = input_file.resolve().parent / output_map_path
+        output_map_path = base_dir / output_map_path
 
-    plot_parallel_compressor_result(result, compressor_map=model.map)
+    if "output_efficiency_map_file" in config:
+        output_efficiency_map_path = Path(config["output_efficiency_map_file"])
+        if not output_efficiency_map_path.is_absolute():
+            output_efficiency_map_path = base_dir / output_efficiency_map_path
+    else:
+        # Default: same name/location as the pressure-ratio plot, with
+        # "_efficiency" inserted before the extension.
+        output_efficiency_map_path = output_map_path.with_name(
+            f"{output_map_path.stem}_efficiency{output_map_path.suffix}"
+        )
+
+    # Pressure-ratio map (speedlines + solved operating points).
+    plot_parallel_compressor_result(result, compressor_map=model.map, quantity="pressure_ratio")
     plt.tight_layout()
     plt.savefig(output_map_path, dpi=130)
-    print(f"\nSaved plot to {output_map_path}")
+    print(f"\nSaved pressure-ratio plot to {output_map_path}")
+
+    # Efficiency map -- same layout and operating points, plotted against
+    # efficiency instead of pressure ratio.
+    plot_parallel_compressor_result(result, compressor_map=model.map, quantity="efficiency")
+    plt.tight_layout()
+    plt.savefig(output_efficiency_map_path, dpi=130)
+    print(f"Saved efficiency plot to {output_efficiency_map_path}")
 
 
 if __name__ == "__main__":
