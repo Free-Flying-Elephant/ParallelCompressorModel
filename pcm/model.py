@@ -327,6 +327,7 @@ class ParallelCompressorModel:
             xtol=1e-12,
             ftol=1e-12,
             gtol=1e-12,
+            verbose=1
         )
         if not result.success:
             warnings.warn(
@@ -338,6 +339,7 @@ class ParallelCompressorModel:
             )
 
         converged_betas = result.x
+        print(converged_betas)
         segment_results = [
             self._segment_performance(seg, float(b))
             for seg, b in zip(self.segments, converged_betas)
@@ -384,6 +386,8 @@ class ParallelCompressorModel:
         p_static, T_static = self._static_from_total(
             p0_out, T0_out, mass_flow_actual, segment_area
         )
+
+        print(segment.angle_deg, p0_out, T0_out, p_static, T_static)
 
         surge_margin = self._surge_margin(corrected_speed, mass_flow_corrected_full)
 
