@@ -91,8 +91,8 @@ def _build_model(config: Dict[str, Any], base_dir: Path) -> ParallelCompressorMo
         inlet_T0=segments_cfg["inlet_T0"],
         gas=gas,
         reference=reference,
-        exit_area=float(config.get("exit_area", 1.0)),
-        inlet_area=float(config.get("inlet_area", 1.0))
+        exit_area=float(config.get("exit_area", 0.007)),
+        inlet_area=float(config.get("inlet_area", 0.01))
     ) # 106.937708 # 37.96
 
 

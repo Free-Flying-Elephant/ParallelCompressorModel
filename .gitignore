@@ -7,3 +7,6 @@ ai
 open_maps
 res
 *.patch
+*.csv
+*svg
+vis

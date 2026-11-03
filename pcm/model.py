@@ -253,7 +253,7 @@ class ParallelCompressorModel:
         # pattern). See _angle_weighted_average, used identically by the
         # DC(theta) descriptors below.
         T0_nominal = self._angle_weighted_average([seg.T0_in for seg in self.segments])
-        p0_nominal = self._angle_weighted_average([seg.p0_in for seg in self.segments])
+        p0_nominal = self._angle_weighted_average([seg.p0_in for seg in self.segments]) # TODO
         self._nominal_corrected_speed = self._corrected_speed(T0_nominal)
         self._nominal_mass_flow_corrected = self.map.get_mass_flow(
             self._nominal_corrected_speed, self.beta
@@ -475,10 +475,13 @@ class ParallelCompressorModel:
         # Same angle-weighting fix as _compute_nominal_operating_point: must
         # not depend on how many segments the annulus happens to be split
         # into.
-        p0_in_mean = self._angle_weighted_average([seg.p0_in for seg in self.segments])
+        p0_in_mean = np.sum([r.mass_flow * seg.p0_in for seg, r in zip(self.segments, segment_results)]) / np.sum([r.mass_flow for r in segment_results])
         pressure_ratio_overall = p0_overall / p0_in_mean
 
+        T0_in_mean = np.sum([r.mass_flow * seg.T0_in for seg, r in zip(self.segments, segment_results)]) / np.sum([r.mass_flow for r in segment_results])
+
         assert self._nominal_corrected_speed is not None  # set by solve()
+        self._nominal_mass_flow_corrected = total_mass_flow * 101325. / p0_in_mean * np.sqrt(T0_in_mean / 288.15)
         assert self._nominal_mass_flow_corrected is not None  # set by solve()
 
         return SegmentResult(
@@ -531,6 +534,11 @@ class ParallelCompressorModel:
         )
 
     def _angle_weighted_average(self, values: Sequence[float]) -> float:
+        """Angle-weighted average of a per-segment quantity over the full annulus."""
+        weighted_sum = sum(seg.angle_deg * v for seg, v in zip(self.segments, values))
+        return weighted_sum / 360.0
+
+    def _mass_weighted_average(self, values: Sequence[float]) -> float:
         """Angle-weighted average of a per-segment quantity over the full annulus."""
         weighted_sum = sum(seg.angle_deg * v for seg, v in zip(self.segments, values))
         return weighted_sum / 360.0
